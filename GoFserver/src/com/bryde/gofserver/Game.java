@@ -20,13 +20,17 @@ public class Game implements Runnable {
 	private int mTurn;
 	
 	private Player mCurrentPlayer;
-	private Player mPreviousTurnWinner;
+	private Player mPreviousPlayWinner;
+	private Player mLastTurnWinner;
+	private Player mLastTurnLoser;
 	
 	private boolean mClockwise;
 	
 	private GoFcombination mLastPlayedCombination;
 	
 	private boolean mPlay1M;
+	
+	private boolean mCannotPass;
 
 	private class Deck {
 		private static final int NB_CARDS = 64;
@@ -79,7 +83,6 @@ public class Game implements Runnable {
 	
 	@Override
 	public void run() {
-		int playerNb = 1;
 		System.out.println("Game #" + mID + " starts!!!");
 		for(Player p : mPlayerList) {
 			p.sendStart();
@@ -90,18 +93,34 @@ public class Game implements Runnable {
 		while(!isOver()) {
 			mTurn++;
 			
+			sendGameStatus(GoFmessage.STATE_NEW_TURN);
+			
 			mDeck.shuffle();
 			
 			sendDistribution(mDeck.distribute(mPlayerList));
 			
+			if(mTurn > 1) {
+				mLastTurnWinner.sendChooseWorst();
+			
+				GoFcard worstCard = mLastTurnWinner.receiveWorstCard();
+				GoFcard bestCard = mLastTurnLoser.getBestCard();
+			
+				this.sendGiveBest(bestCard);
+				this.sendGiveWorst(worstCard);
+			
+				updateWinnerLoserHands(bestCard, worstCard);
+			}
+			
 			while(!turnIsOver()) {
+				mCannotPass = true;
+				sendGameStatus(GoFmessage.STATE_NEW_PLAY);
 				while(!playIsOver()) {
 					boolean validPlay = false;
 					Player currentPlayer = determineCurrentPlayer();
 					
-					while(!validPlay) {
-						sendPlay(currentPlayer.getLogin());
+					sendPlay(currentPlayer.getLogin());
 					
+					while(!validPlay) {
 						ArrayList<GoFcard> play = currentPlayer.receivePlay();
 						
 						GoFcombination currentCombination = new GoFcombination(play);
@@ -111,15 +130,18 @@ public class Game implements Runnable {
 							currentPlayer.updateHand(play);
 							currentPlayer.sendAccept();
 							sendPlayerHasPlayed(currentPlayer.getLogin(), play);
-							mLastPlayedCombination = currentCombination;
+							if(!currentCombination.isPass())
+								mLastPlayedCombination = currentCombination;
 							if(mPlay1M) mPlay1M = false;
 						} else {
 							currentPlayer.sendError();
 						}
 					}
+					mCannotPass = false;
 				}
+				mCurrentPlayer = null;
 				mLastPlayedCombination = null;
-				mPreviousTurnWinner = determinePlayWinner();
+				mPreviousPlayWinner = determinePlayWinner();
 				resetPassed();
 			}
 			
@@ -128,11 +150,20 @@ public class Game implements Runnable {
 			invertDirection();
 		}
 		
-		for(Player p : mPlayerList) {
-			p.sendGameOver(determineGameWinner());
-		}
+		sendGameStatus(GoFmessage.STATE_GAME_OVER);
 	}
 	
+	private void updateWinnerLoserHands(GoFcard bestCard, GoFcard worstCard) {
+		mLastTurnWinner.removeCard(worstCard);
+		mLastTurnLoser.removeCard(bestCard);
+		
+		mLastTurnWinner.addCard(bestCard);
+		mLastTurnLoser.addCard(worstCard);
+		
+		mLastTurnWinner.sendDistribution(mLastTurnWinner.getHand());
+		mLastTurnLoser.sendDistribution(mLastTurnLoser.getHand());
+	}
+
 	public Game() {
 		setID(++mGameNumber);
 		mPlayerList = new ArrayList<Player>(PLAYER_COUNT);
@@ -141,10 +172,11 @@ public class Game implements Runnable {
 		mDeck = new Deck();
 		mTurn = 0;
 		mCurrentPlayer = null;
-		mPreviousTurnWinner = null;
+		mPreviousPlayWinner = null;
 		mClockwise = false; 
 		mLastPlayedCombination = null;
 		mPlay1M = true;
+		mCannotPass = true;
 	}
 	
 	public void addPlayer(Player p) {
@@ -206,15 +238,30 @@ public class Game implements Runnable {
 		}
 	}
 	
+	private void sendGameStatus(int state) {
+		for(Player p : mPlayerList)
+			p.sendGameStatus(state, mScore);
+	}
+	
+	private void sendGiveBest(GoFcard bestCard) {
+		for(Player p : mPlayerList)
+			p.sendGiveBest(mLastTurnLoser.getLogin(), mLastTurnWinner.getLogin(), bestCard);
+	}
+	
+	private void sendGiveWorst(GoFcard worstCard) {
+		for(Player p : mPlayerList)
+			p.sendGiveBest(mLastTurnWinner.getLogin(), mLastTurnLoser.getLogin(), worstCard);
+	}
+	
 	private Player determineCurrentPlayer() {
 		if(mCurrentPlayer == null) {
-			if(mTurn == 1) {
+			if(mPlay1M) {
 				for(Player p : mPlayerList) {
 					if(p.has1M())
 						mCurrentPlayer = p;
 				}
 			} else {
-				mCurrentPlayer = mPreviousTurnWinner;
+				mCurrentPlayer = mPreviousPlayWinner;
 			}
 		} else {
 			do {
@@ -228,9 +275,10 @@ public class Game implements Runnable {
 					
 				} else {
 					if(index == PLAYER_COUNT-1)
-						mCurrentPlayer = mPlayerList.get(index+1);
-					else
 						mCurrentPlayer = mPlayerList.get(0);
+					else
+						mCurrentPlayer = mPlayerList.get(index+1);
+						
 				}
 			} while(mPassed.get(mCurrentPlayer).booleanValue());
 		}
@@ -253,30 +301,21 @@ public class Game implements Runnable {
 				nb_passed++;
 		}
 		
-		return nb_passed == 3;
+		return nb_passed == 3 || turnIsOver();
 	}
 	
 	private Player determinePlayWinner() {
 		Player winner = null;
+		
+		for(Player p : mPlayerList)
+			if(p.getHand().size() == 0)
+				return p;
+		
 		for(Player p : mPlayerList) {
 			if(!mPassed.get(p).booleanValue())
 				winner = p;
 		}
 		return winner;
-	}
-	
-	private Player determineGameWinner() {
-		int bestScore = 100;
-		Player bestPlayer = mPlayerList.get(0);
-		
-		for(Player p : mPlayerList) {
-			if(mScore.get(p).intValue() < bestScore) {
-				bestPlayer = p;
-				bestScore = mScore.get(p).intValue();
-			}
-		}
-		
-		return bestPlayer;
 	}
 	
 	private void invertDirection() {
@@ -285,8 +324,12 @@ public class Game implements Runnable {
 	
 	private boolean checkPlay(GoFcombination c) {
 		if(c.isPass()) {
-			setPassed(mCurrentPlayer);
-			return true;
+			if(mCannotPass) {
+				return false;
+			} else {
+				setPassed(mCurrentPlayer);
+				return true;
+			}
 		}
 		
 		for(GoFcard card : c.getCards())
@@ -314,8 +357,26 @@ public class Game implements Runnable {
 	}
 	
 	private void updateScore() {
+		int worstScore = 0;
+		mLastTurnWinner = null;
+		mLastTurnLoser = null;
+		
 		for(Player p : mPlayerList) {
 			int remainingCards = p.getHand().size();
+			
+			//determine turn winner and loser
+			if(remainingCards == 0) {
+				mLastTurnWinner = p;
+			} else if(remainingCards > worstScore) {
+				worstScore = remainingCards;
+				mLastTurnLoser = p;
+			} else if(remainingCards == worstScore) {
+				if(mLastTurnLoser != null) {
+					if(mScore.get(p).intValue() > mScore.get(mLastTurnLoser).intValue()) {
+						mLastTurnLoser = p;
+					}
+				}
+			}
 			
 			if(remainingCards < 8) {
 				// x1

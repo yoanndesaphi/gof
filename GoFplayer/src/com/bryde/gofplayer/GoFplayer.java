@@ -16,6 +16,7 @@ import java.io.ObjectInputStream;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,7 +37,6 @@ public class GoFplayer {
 	public GoFplayer(String login) {
 		this.mLogin = login;
 		this.mGameOver = false;
-		this.mWinner = "";
 		this.mScores = new HashMap<String, Integer>(4);
 		this.mCurrentPlayer = "";
 		
@@ -55,10 +55,6 @@ public class GoFplayer {
 	
 	public boolean isGameOver() {
 		return mGameOver;
-	}
-	
-	public String getWinner() {
-		return mWinner;
 	}
 	
 	public void closeConnection() {
@@ -92,12 +88,9 @@ public class GoFplayer {
 				GoFcombination.displayCardList(mHand);
 				break;
 			case GoFmessage.PLAY:
-				boolean ok = false;
 				mCurrentPlayer = (String)message.getArgs().get(GoFmessage.LOGNAME);
-				if(this.mLogin.equals(mCurrentPlayer)) {
-					while(!ok)
-						ok = play();
-				}
+				if(this.mLogin.equals(mCurrentPlayer))
+					while(!play());
 				break;
 			case GoFmessage.PLAYER_HAS_PLAYED:
 				String player = (String)message.getArgs().get(GoFmessage.LOGNAME);
@@ -105,14 +98,46 @@ public class GoFplayer {
 				System.out.println(player + " has played :");
 				GoFcombination.displayCardList(cards);
 				break;
-			case GoFmessage.GAME_OVER:
-				mWinner = (String)message.getArgs().get(GoFmessage.WINNER);
-				mGameOver = true;
-				break;
 			case GoFmessage.GAME_PLAYERS:
 				mPlayers = new ArrayList<String>((ArrayList<String>)message.getArgs().get(GoFmessage.PLAYERS));
 				for(String str : mPlayers)
 					mScores.put(str, Integer.valueOf(0));
+				break;
+			case GoFmessage.GAME_STATUS:
+				Integer state = (Integer)message.getArgs().get(GoFmessage.STATE);
+				switch(state.intValue()) {
+					case GoFmessage.STATE_NEW_PLAY:
+						System.out.println("New Play");
+						break;
+					case GoFmessage.STATE_GAME_OVER:
+						mGameOver = true;
+						System.out.println("Game over!");
+						System.out.println("Scores:");
+						for(Entry<String, Integer> score : ((HashMap<String, Integer>)message.getArgs().get(GoFmessage.SCORES)).entrySet())
+							System.out.println(score.getKey() + " : " + score.getValue());
+						break;
+					case GoFmessage.STATE_NEW_TURN:
+						System.out.println("Scores:");
+						for(Entry<String, Integer> score : ((HashMap<String, Integer>)message.getArgs().get(GoFmessage.SCORES)).entrySet())
+							System.out.println(score.getKey() + " : " + score.getValue());
+						System.out.println("New turn starts");
+						break;
+				}
+				break;
+			case GoFmessage.CHOOSE_WORST:
+				sendWorst();
+				break;
+			case GoFmessage.GIVE_BEST:
+				GoFcard bestCard = (GoFcard)message.getArgs().get(GoFmessage.CARD);
+				String sender = (String)message.getArgs().get(GoFmessage.SENDER);
+				String receiver = (String)message.getArgs().get(GoFmessage.RECEIVER);
+				System.out.println(sender + " gives " + bestCard.toString() + " to " + receiver);
+				break;
+			case GoFmessage.GIVE_WORST:
+				GoFcard worstCard = (GoFcard)message.getArgs().get(GoFmessage.CARD);
+				String sender1 = (String)message.getArgs().get(GoFmessage.SENDER);
+				String receiver1 = (String)message.getArgs().get(GoFmessage.RECEIVER);
+				System.out.println(sender1 + " gives " + worstCard.toString() + " to " + receiver1);
 				break;
 		}
 	}
@@ -193,6 +218,46 @@ public class GoFplayer {
 		return ok;
 	}
 	
+	private void sendWorst() {
+		GoFcard worstCard = null;
+		//flush System input
+		try {
+			System.in.skip(System.in.available());
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+		
+		BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+		String line = "";
+		
+		System.out.println("Enter your worst card : ");
+		try {
+			line = br.readLine();
+		} catch (IOException e) {
+			System.out.println("sendWorst Exception: " + e);
+		}
+		
+		if(line.length() > 0) {
+			Pattern p = Pattern.compile("(\\d{1,2})([GYRM])");
+			Matcher m = p.matcher(line);
+			if (m.find()) {
+				worstCard = new GoFcard(m.group(1), m.group(2));
+				System.out.println("Read card :" + worstCard.toString());
+			}
+		}
+		
+		HashMap<String, Object> msgArgs = new HashMap<String, Object>();
+        msgArgs.put(GoFmessage.CARD, worstCard);
+        GoFmessage playMessage = new GoFmessage(GoFmessage.WORST_CARD, msgArgs);
+		try {
+			playMessage.writeObject(mOos);
+			mOos.flush();
+		}
+		catch (Exception e) {
+	        System.out.println("sendWorst Exception: " + e);
+	    }
+	}
+	
 	private boolean play() {	
 		ArrayList<GoFcard> cards = readCards();
 		
@@ -211,9 +276,16 @@ public class GoFplayer {
 	}
 	
 	private ArrayList<GoFcard> readCards() {
+		//flush System input
+		try {
+			System.in.skip(System.in.available());
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+		
 		BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-		String line = "";  
-
+		String line = "";
+		
 		System.out.println("Enter cards (blank to pass) : ");
 		try {
 			line = br.readLine();
@@ -231,7 +303,6 @@ public class GoFplayer {
 				if (m.find()) {
 					GoFcard c = new GoFcard(m.group(1), m.group(2));
 					cards.add(c);
-					System.out.println("Read card :" + c.toString());
 				}
 			}
 		}

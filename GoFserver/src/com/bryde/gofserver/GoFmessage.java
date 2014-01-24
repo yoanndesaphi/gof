@@ -8,6 +8,7 @@ import java.io.ObjectOutputStream;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map.Entry;
 
 public class GoFmessage implements Serializable {
 	private static final long serialVersionUID = 5056572645027074636L;
@@ -28,12 +29,13 @@ public class GoFmessage implements Serializable {
 	public static final int PLAY		 		= 7;
 	public static final int CARDS_PLAYED 		= 8;
 	public static final int PLAY_ACCEPTED 		= 9;
-	public static final int GAME_OVER			= 10;
-	public static final int GAME_STATUS			= 11; // TODO
-	public static final int GAME_PLAYERS		= 12;
-	public static final int GIVE_WORST			= 13; // TODO
-	public static final int GIVE_BEST			= 14;
-	public static final int PLAYER_HAS_PLAYED	= 15;
+	public static final int GAME_STATUS			= 10;
+	public static final int GAME_PLAYERS		= 11;
+	public static final int CHOOSE_WORST		= 12; // TODO
+	public static final int WORST_CARD			= 13; // TODO
+	public static final int GIVE_WORST			= 14; // TODO
+	public static final int GIVE_BEST			= 15; // TODO
+	public static final int PLAYER_HAS_PLAYED	= 16;
 	
 	/*
 	 * List of argument IDs 
@@ -41,10 +43,12 @@ public class GoFmessage implements Serializable {
 	public static final String LOGNAME 	= "LOGNAME";
 	public static final String HAND 	= "HAND";
 	public static final String CARDS 	= "CARDS";
-	public static final String WINNER	= "WINNER";
-	public static final String STATE	= "STATE"; // TODO
-	public static final String SCORES	= "SCORES"; // TODO
+	public static final String STATE	= "STATE";
+	public static final String SCORES	= "SCORES";
 	public static final String PLAYERS	= "PLAYERS";
+	public static final String SENDER	= "SENDER";
+	public static final String RECEIVER	= "RECEIVER";
+	public static final String CARD		= "CARD";
 	
 	public static final int STATE_NEW_PLAY	= 0;
 	public static final int STATE_NEW_TURN	= 1;
@@ -107,8 +111,21 @@ public class GoFmessage implements Serializable {
 					card.writeObject(o);
 				}
 				break;
-			case GAME_OVER:
-				o.writeObject(mArgs.get(WINNER));
+			case GAME_STATUS:
+				o.writeInt(((Integer)mArgs.get(STATE)).intValue());
+				for(Entry<Player, Integer> p : ((HashMap<Player, Integer>)mArgs.get(SCORES)).entrySet()) {
+					o.writeObject(p.getKey().getLogin());
+					o.writeObject(p.getValue());
+				}
+				break;
+			case GIVE_BEST:
+			case GIVE_WORST:
+				o.writeObject(mArgs.get(SENDER));
+				o.writeObject(mArgs.get(RECEIVER));
+				((GoFcard)mArgs.get(CARD)).writeObject(o);
+				break;
+			case WORST_CARD:
+				((GoFcard)mArgs.get(CARD)).writeObject(o);
 				break;
 		}
 	}
@@ -157,8 +174,25 @@ public class GoFmessage implements Serializable {
 				}
 				mArgs.put(CARDS, cards2);
 				break;
-			case GAME_OVER:
-				mArgs.put(WINNER, o.readObject());
+			case GAME_STATUS:
+				mArgs.put(STATE, Integer.valueOf(o.readInt()));
+				HashMap<String, Integer> scores = new HashMap<String, Integer>(4);
+				for(int i = 0; i < 4; i++)
+					scores.put((String)o.readObject(), (Integer)o.readObject());
+				mArgs.put(SCORES, scores);
+				break;
+			case GIVE_BEST:
+			case GIVE_WORST:
+				mArgs.put(SENDER, o.readObject());
+				mArgs.put(RECEIVER, o.readObject());
+				GoFcard card = new GoFcard();
+				card.readObject(o);
+				mArgs.put(CARD, card);
+				break;
+			case WORST_CARD:
+				GoFcard card1 = new GoFcard();
+				card1.readObject(o);
+				mArgs.put(CARD, card1);
 				break;
 		}
 	}

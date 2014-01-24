@@ -107,6 +107,23 @@ public class Player {
 		return cards;
 	}
 	
+	public GoFcard receiveWorstCard() {
+		GoFcard worstCard = null;
+		GoFmessage worstCardMessage = new GoFmessage();
+		try {
+			worstCardMessage.readObject(mOis);
+        }
+        catch (Exception e) {
+          System.out.println("receivePlay Exception: " + e);
+        }
+		
+		if(worstCardMessage.getCommand() == GoFmessage.WORST_CARD) {
+        	worstCard = (GoFcard)worstCardMessage.getArgs().get(GoFmessage.CARD);
+        }
+		
+		return worstCard;
+	}
+	
 	public void sendDistribution(ArrayList<GoFcard> hand) {
 		mHand = hand;
         HashMap<String, Object> msgArgs = new HashMap<String, Object>();
@@ -147,16 +164,58 @@ public class Player {
 	    }
 	}
 	
-	public void sendGameOver(Player p) {
-		GoFmessage gameOverMessage = new GoFmessage(GoFmessage.GAME_OVER, null);
+	public void sendGameStatus(int state, HashMap<Player, Integer> scores) {
 		HashMap<String, Object> msgArgs = new HashMap<String, Object>();
-        msgArgs.put(GoFmessage.WINNER, p.getLogin());
+		msgArgs.put(GoFmessage.STATE, Integer.valueOf(state));
+        msgArgs.put(GoFmessage.SCORES, scores);
+        GoFmessage statusMessage = new GoFmessage(GoFmessage.GAME_STATUS, msgArgs);
 		try {
-			gameOverMessage.writeObject(mOos);
+			statusMessage.writeObject(mOos);
 			mOos.flush();
 		}
 		catch (Exception e) {
-	        System.out.println("sendGameOver Exception: " + e);
+	        System.out.println("sendGameStatus Exception: " + e);
+	    }
+	}
+	
+	public void sendGiveBest(String sender, String receiver, GoFcard bestCard) {
+		HashMap<String, Object> msgArgs = new HashMap<String, Object>();
+		msgArgs.put(GoFmessage.SENDER, sender);
+        msgArgs.put(GoFmessage.RECEIVER, receiver);
+        msgArgs.put(GoFmessage.CARD, bestCard);
+        GoFmessage giveBestMessage = new GoFmessage(GoFmessage.GIVE_BEST, msgArgs);
+		try {
+			giveBestMessage.writeObject(mOos);
+			mOos.flush();
+		}
+		catch (Exception e) {
+	        System.out.println("sendGiveBest Exception: " + e);
+	    }
+	}
+	
+	public void sendGiveWorst(String sender, String receiver, GoFcard worstCard) {
+		HashMap<String, Object> msgArgs = new HashMap<String, Object>();
+		msgArgs.put(GoFmessage.SENDER, sender);
+        msgArgs.put(GoFmessage.RECEIVER, receiver);
+        msgArgs.put(GoFmessage.CARD, worstCard);
+        GoFmessage giveWorstMessage = new GoFmessage(GoFmessage.GIVE_WORST, msgArgs);
+		try {
+			giveWorstMessage.writeObject(mOos);
+			mOos.flush();
+		}
+		catch (Exception e) {
+	        System.out.println("sendGiveWorst Exception: " + e);
+	    }
+	}
+	
+	public void sendChooseWorst() {
+        GoFmessage chooseWorstMessage = new GoFmessage(GoFmessage.CHOOSE_WORST, null);
+		try {
+			chooseWorstMessage.writeObject(mOos);
+			mOos.flush();
+		}
+		catch (Exception e) {
+	        System.out.println("sendChooseWorst Exception: " + e);
 	    }
 	}
 	
@@ -187,5 +246,26 @@ public class Player {
 			if(i != -1)
 				mHand.remove(i);
 		}
+	}
+	
+	public GoFcard getBestCard() {
+		GoFcard bestCard = new GoFcard(1, GoFcard.COLOR_GREEN);
+		for(GoFcard card : mHand)
+			if(card.isStronger(bestCard))
+				bestCard = card;
+		return bestCard;
+	}
+	
+	public void removeCard(GoFcard card) {
+		for(GoFcard c : mHand) {
+			if(c.equals(card)) {
+				mHand.remove(c);
+				return;
+			}
+		}
+	}
+	
+	public void addCard(GoFcard card) {
+		mHand.add(card);
 	}
 }
