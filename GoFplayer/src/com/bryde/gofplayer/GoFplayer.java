@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 
 public class GoFplayer {
 	private static final String GOF_HOST = "localhost";
-	private final static int GOF_PORT = 19999;
+	private final static int GOF_PORT = 13451;
 	private Socket mConnection;
 	private ObjectOutputStream mOos;
 	private ObjectInputStream mOis;

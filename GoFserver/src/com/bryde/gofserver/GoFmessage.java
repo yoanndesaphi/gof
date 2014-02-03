@@ -31,10 +31,10 @@ public class GoFmessage implements Serializable {
 	public static final int PLAY_ACCEPTED 		= 9;
 	public static final int GAME_STATUS			= 10;
 	public static final int GAME_PLAYERS		= 11;
-	public static final int CHOOSE_WORST		= 12; // TODO
-	public static final int WORST_CARD			= 13; // TODO
-	public static final int GIVE_WORST			= 14; // TODO
-	public static final int GIVE_BEST			= 15; // TODO
+	public static final int CHOOSE_WORST		= 12;
+	public static final int WORST_CARD			= 13;
+	public static final int GIVE_WORST			= 14;
+	public static final int GIVE_BEST			= 15;
 	public static final int PLAYER_HAS_PLAYED	= 16;
 	
 	/*

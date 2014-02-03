@@ -86,7 +86,7 @@ public class GoFserver implements Runnable {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		final int port = 19999;
+		final int port = 13451;
 		
 		mGameList = new ArrayList<Game>();
 		
